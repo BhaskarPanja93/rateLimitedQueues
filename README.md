@@ -1,43 +1,34 @@
-# randomisedString v1.3.1
+# rateLimitedQueues v0.0.1a1
 
-```pip install randomisedString --upgrade```
+```pip install rateLimitedQueues --upgrade```
 
 
-###### <br>A well maintained program to generate randomised strings. Can be used for assigning unique IDs of any specified size. Can be alpha only or numeric or alphanumeric as specified.
-
+###### <br>A well maintained program to execute functions in queue as if only 1 worker is executing them one by one (High priority first). Works wonders when a series of time consuming tasks has to be performed but they need to be in sequence.
 
 <br>To install: 
 ```
-pip install randomisedString --upgrade
-pip3 install randomisedString --upgrade
-python -m pip install randomisedString --upgrade
-python3 -m pip install randomisedString --upgrade
+pip install rateLimitedQueues --upgrade
+pip3 install rateLimitedQueues --upgrade
+python -m pip install rateLimitedQueues --upgrade
+python3 -m pip install rateLimitedQueues --upgrade
 ```
 
 
 #### <br><br>Using this program is as simple as:
 ```
-from randomisedString import Generator as StringGenerator
+from rateLimitedQueues import Manager
 
-generator = StringGenerator()
+rateLimiter = Manager()
 
-print(generator.AlphaNumeric(10, 10))
->> 45HCMJ4SCy
-print(generator.OnlyNumeric(10, 10))
->> cmkntCBmdp
-print(generator.OnlyAlpha(10, 10))
->> UjfQZDDOOq
-print(generator.AlphaNumeric(5, 10))
->> FxgirdEYB
-print(generator.OnlyNumeric(5, 10))
->> XYfzAT
-print(generator.OnlyAlpha(5, 10))
->> HqGiHqt
+def functionToCall(a, b, c, d, *args, **kwargs):
+    sleep(2)
+    print(a, b, c, d, args, kwargs)
+
+
+for _ in range(10):
+    rateLimiter.queueAction(functionToCall, randrange(1,5), True, 1, 2, 3, 4, 5, c=10, d=12, e=60)
+
 ```
-
-
-### Future implementations:
-* Include special characters.
 
 
 ###### <br>This project is always open to suggestions and feature requests.
