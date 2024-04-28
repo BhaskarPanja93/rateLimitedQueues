@@ -1,4 +1,4 @@
-__version__ = "0.0.1a2"
+__version__ = "0.0.1a3"
 __packagename__ = "rateLimitedQueues"
 
 
@@ -54,13 +54,15 @@ class Manager:
             topPriorityTasks = self.__tasks.pop(max(self.__tasks))
             for task in topPriorityTasks:
                 mainFunction, postFunction, args, kwargs, executeThreaded = task
-                if not executeThreaded: postFunction(mainFunction(*args, **kwargs))
-                else: Imports.Thread(target=mainFunction, args=args, kwargs=kwargs).start()
                 if self.maxRateLimitWaitDuration >= self.minRateLimitWaitDuration: Imports.sleep(self.maxRateLimitWaitDuration)
+                if not executeThreaded:
+                    if postFunction is not None: Imports.Thread(target=postFunction, args=args, kwargs={"functionResponse":mainFunction(*args, **kwargs)}.update(kwargs)).start()
+                    else: mainFunction(*args, **kwargs)
+                else: Imports.Thread(target=mainFunction, args=args, kwargs=kwargs).start()
         self.__workerIdle = True
 
 
-    def queueAction(self, mainFunction, postFunction, executePriority:int=0, executeThreaded: bool = False, *args, **kwargs):
+    def queueAction(self, mainFunction, executePriority:int=0, executeThreaded: bool = False, postFunction = None, *args, **kwargs):
         """
         Queue a new function to be executed
         :param postFunction:
@@ -70,7 +72,7 @@ class Manager:
         :return:
         """
         if not callable(mainFunction): return print("Please pass a callable object as the `mainFunction` parameter...")
-        if not callable(postFunction): return print("Please pass a callable object as the `postFunction` parameter...")
+        if postFunction is not None and not callable(postFunction): return print("Please pass a callable object as the `postFunction` parameter...")
         execList = [mainFunction, postFunction, args, kwargs, executeThreaded]
         if executePriority in self.__tasks: self.__tasks[executePriority].append(execList)
         else: self.__tasks[executePriority] = [execList]
