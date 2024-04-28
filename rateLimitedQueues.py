@@ -1,4 +1,4 @@
-__version__ = "0.0.1a3"
+__version__ = "0.0.1a4"
 __packagename__ = "rateLimitedQueues"
 
 
@@ -53,18 +53,21 @@ class Manager:
         while self.__tasks:
             topPriorityTasks = self.__tasks.pop(max(self.__tasks))
             for task in topPriorityTasks:
-                mainFunction, postFunction, args, kwargs, executeThreaded = task
+                mainFunction, args, kwargs, executeThreaded, postFunction, postArgs, postKwArgs = task
+                if postKwArgs is None: postKwArgs = {}
+                if postArgs is None: postArgs = ()
                 if self.maxRateLimitWaitDuration >= self.minRateLimitWaitDuration: Imports.sleep(self.maxRateLimitWaitDuration)
-                if not executeThreaded:
-                    if postFunction is not None: Imports.Thread(target=postFunction, args=args, kwargs={"functionResponse":mainFunction(*args, **kwargs)}.update(kwargs)).start()
-                    else: mainFunction(*args, **kwargs)
-                else: Imports.Thread(target=mainFunction, args=args, kwargs=kwargs).start()
+                if executeThreaded: Imports.Thread(target=mainFunction, args=args, kwargs=kwargs).start()
+                else: postKwArgs.update({"functionResponse": mainFunction(*args, **kwargs)})
+                if postFunction is not None: Imports.Thread(target=postFunction, args=postArgs, kwargs=postKwArgs).start()
         self.__workerIdle = True
 
 
-    def queueAction(self, mainFunction, executePriority:int=0, executeThreaded: bool = False, postFunction = None, *args, **kwargs):
+    def queueAction(self, mainFunction, executePriority:int=0, executeThreaded: bool = False, postFunction = None, postArgs:tuple = None, postKwArgs:dict = None, *args, **kwargs):
         """
         Queue a new function to be executed
+        :param postKwArgs:
+        :param postArgs:
         :param postFunction:
         :param mainFunction:
         :param executePriority:
@@ -73,7 +76,9 @@ class Manager:
         """
         if not callable(mainFunction): return print("Please pass a callable object as the `mainFunction` parameter...")
         if postFunction is not None and not callable(postFunction): return print("Please pass a callable object as the `postFunction` parameter...")
-        execList = [mainFunction, postFunction, args, kwargs, executeThreaded]
+        if postArgs is not None and type(postArgs)!=tuple: return print("Please pass a tuple as postArgs...")
+        if postKwArgs is not None and type(postKwArgs)!=dict: return print("Please pass a dictionary as postKwArgs...")
+        execList = [mainFunction, args, kwargs, executeThreaded, postFunction, postArgs, postKwArgs]
         if executePriority in self.__tasks: self.__tasks[executePriority].append(execList)
         else: self.__tasks[executePriority] = [execList]
         Imports.Thread(target=self.__startExecution).start()
