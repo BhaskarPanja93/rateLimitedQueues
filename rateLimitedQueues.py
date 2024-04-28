@@ -1,4 +1,4 @@
-__version__ = "0.0.1a1"
+__version__ = "0.0.1a2"
 __packagename__ = "rateLimitedQueues"
 
 
@@ -53,23 +53,25 @@ class Manager:
         while self.__tasks:
             topPriorityTasks = self.__tasks.pop(max(self.__tasks))
             for task in topPriorityTasks:
-                if not task[3]:
-                    task[0](*task[1], **task[2])
-                else:
-                    Imports.Thread(target=task[0], args=task[1], kwargs=task[2]).start()
+                mainFunction, postFunction, args, kwargs, executeThreaded = task
+                if not executeThreaded: postFunction(mainFunction(*args, **kwargs))
+                else: Imports.Thread(target=mainFunction, args=args, kwargs=kwargs).start()
                 if self.maxRateLimitWaitDuration >= self.minRateLimitWaitDuration: Imports.sleep(self.maxRateLimitWaitDuration)
         self.__workerIdle = True
 
 
-    def queueAction(self, function, priority:int=0, threaded: bool = False, *args, **kwargs):
+    def queueAction(self, mainFunction, postFunction, executePriority:int=0, executeThreaded: bool = False, *args, **kwargs):
         """
         Queue a new function to be executed
-        :param function:
-        :param priority:
-        :param threaded:
+        :param postFunction:
+        :param mainFunction:
+        :param executePriority:
+        :param executeThreaded:
         :return:
         """
-        if not callable(function): return print("Please pass a callable object as the `function` parameter...")
-        if priority in self.__tasks: self.__tasks[priority].append([function, args, kwargs, threaded])
-        else: self.__tasks[priority] = [[function, args, kwargs, threaded]]
+        if not callable(mainFunction): return print("Please pass a callable object as the `mainFunction` parameter...")
+        if not callable(postFunction): return print("Please pass a callable object as the `postFunction` parameter...")
+        execList = [mainFunction, postFunction, args, kwargs, executeThreaded]
+        if executePriority in self.__tasks: self.__tasks[executePriority].append(execList)
+        else: self.__tasks[executePriority] = [execList]
         Imports.Thread(target=self.__startExecution).start()
