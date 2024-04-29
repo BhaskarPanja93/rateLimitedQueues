@@ -1,4 +1,4 @@
-__version__ = "0.0.1a5"
+__version__ = "0.0.1a7"
 __packagename__ = "rateLimitedQueues"
 
 
@@ -30,7 +30,7 @@ def updatePackage():
 
 class Imports:
     from typing import Any, Callable
-    from time import sleep
+    from time import sleep, time
     from threading import Thread
 
 
@@ -41,6 +41,7 @@ class Manager:
         self.defaultRateLimitWaitDuration = timeBetweenExecution
         self.maxRateLimitWaitDuration = self.defaultRateLimitWaitDuration
         self.minRateLimitWaitDuration = 0.001
+        self.lastExecutionAt = 0
 
 
     def __startExecution(self) -> None:
@@ -53,15 +54,16 @@ class Manager:
         while self.__tasks:
             topPriority = max(self.__tasks)
             task = self.__tasks[topPriority].pop()
-            if not self.__tasks[topPriority]:
-                self.__tasks.pop(topPriority)
+            if not self.__tasks[topPriority]: self.__tasks.pop(topPriority)
             mainFunction, args, kwargs, executeThreaded, postFunction, postArgs, postKwArgs = task
             if postKwArgs is None: postKwArgs = {}
             if postArgs is None: postArgs = ()
-            if self.maxRateLimitWaitDuration >= self.minRateLimitWaitDuration: Imports.sleep(self.maxRateLimitWaitDuration)
+            toSleep = self.maxRateLimitWaitDuration-(Imports.time()-self.lastExecutionAt)
+            if toSleep >= self.minRateLimitWaitDuration: Imports.sleep(toSleep)
             if executeThreaded: Imports.Thread(target=mainFunction, args=args, kwargs=kwargs).start()
             else: postKwArgs.update({"functionResponse": mainFunction(*args, **kwargs)})
             if postFunction is not None: Imports.Thread(target=postFunction, args=postArgs, kwargs=postKwArgs).start()
+            self.lastExecutionAt = Imports.time()
         self.__workerIdle = True
 
 
