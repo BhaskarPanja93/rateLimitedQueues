@@ -1,4 +1,4 @@
-__version__ = "0.0.1a4"
+__version__ = "0.0.1a5"
 __packagename__ = "rateLimitedQueues"
 
 
@@ -51,15 +51,17 @@ class Manager:
         if self.__workerIdle: self.__workerIdle = False
         else: return
         while self.__tasks:
-            topPriorityTasks = self.__tasks.pop(max(self.__tasks))
-            for task in topPriorityTasks:
-                mainFunction, args, kwargs, executeThreaded, postFunction, postArgs, postKwArgs = task
-                if postKwArgs is None: postKwArgs = {}
-                if postArgs is None: postArgs = ()
-                if self.maxRateLimitWaitDuration >= self.minRateLimitWaitDuration: Imports.sleep(self.maxRateLimitWaitDuration)
-                if executeThreaded: Imports.Thread(target=mainFunction, args=args, kwargs=kwargs).start()
-                else: postKwArgs.update({"functionResponse": mainFunction(*args, **kwargs)})
-                if postFunction is not None: Imports.Thread(target=postFunction, args=postArgs, kwargs=postKwArgs).start()
+            topPriority = max(self.__tasks)
+            task = self.__tasks[topPriority].pop()
+            if not self.__tasks[topPriority]:
+                self.__tasks.pop(topPriority)
+            mainFunction, args, kwargs, executeThreaded, postFunction, postArgs, postKwArgs = task
+            if postKwArgs is None: postKwArgs = {}
+            if postArgs is None: postArgs = ()
+            if self.maxRateLimitWaitDuration >= self.minRateLimitWaitDuration: Imports.sleep(self.maxRateLimitWaitDuration)
+            if executeThreaded: Imports.Thread(target=mainFunction, args=args, kwargs=kwargs).start()
+            else: postKwArgs.update({"functionResponse": mainFunction(*args, **kwargs)})
+            if postFunction is not None: Imports.Thread(target=postFunction, args=postArgs, kwargs=postKwArgs).start()
         self.__workerIdle = True
 
 
