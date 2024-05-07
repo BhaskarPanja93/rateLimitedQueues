@@ -1,4 +1,4 @@
-__version__ = "0.0.1a7"
+__version__ = "0.0.2"
 __packagename__ = "rateLimitedQueues"
 
 
@@ -35,21 +35,25 @@ class Imports:
 
 
 class Manager:
-    def __init__(self, timeBetweenExecution:float=1):
-        self.__workerIdle = True
+    def __init__(self, timeBetweenExecution:float=0, smallestWaitTime:float=0):
+        """
+        Initialises a rate limiter cum queued event executor
+        :param timeBetweenExecution: Time to wait between concurrent executions. By default, executed immediately without any time wait.
+        :param smallestWaitTime: any time duration greater than 0 and less than `smallestWaitTime` will automatically be changed to `smallestWaitTime` to prevent warnings for example libuv needs smallestWaitTime to be 0.001
+        """
+        self.__executorIdle = True
         self.__tasks:dict[int, list[list[Imports.Callable | tuple[Imports.Any] | dict[str, Imports.Any]]]] = {}
-        self.defaultRateLimitWaitDuration = timeBetweenExecution
-        self.maxRateLimitWaitDuration = self.defaultRateLimitWaitDuration
-        self.minRateLimitWaitDuration = 0.001
+        self.maxRateLimitWaitDuration = timeBetweenExecution
+        self.minRateLimitWaitDuration = smallestWaitTime
         self.lastExecutionAt = 0
 
 
     def __startExecution(self) -> None:
         """
-        Private method to start executing all pending actions for current visitor. Has to be called everytime there is a new action queued
+        Private method to start executing all pending actions. Runs only one instance of executor. Executes only the oldest task with the highest priority. Handles all time limits.
         :return:
         """
-        if self.__workerIdle: self.__workerIdle = False
+        if self.__executorIdle: self.__executorIdle = False
         else: return
         while self.__tasks:
             topPriority = max(self.__tasks)
@@ -58,24 +62,32 @@ class Manager:
             mainFunction, args, kwargs, executeThreaded, postFunction, postArgs, postKwArgs = task
             if postKwArgs is None: postKwArgs = {}
             if postArgs is None: postArgs = ()
-            toSleep = self.maxRateLimitWaitDuration-(Imports.time()-self.lastExecutionAt)
-            if toSleep >= self.minRateLimitWaitDuration: Imports.sleep(toSleep)
+            if self.maxRateLimitWaitDuration > 0:
+                while True:
+                    toSleep = self.maxRateLimitWaitDuration - (Imports.time() - self.lastExecutionAt)
+                    if toSleep > 0:
+                        if toSleep > self.minRateLimitWaitDuration: Imports.sleep(toSleep)
+                        else: Imports.sleep(self.minRateLimitWaitDuration)
+                    else: break
             if executeThreaded: Imports.Thread(target=mainFunction, args=args, kwargs=kwargs).start()
             else: postKwArgs.update({"functionResponse": mainFunction(*args, **kwargs)})
             if postFunction is not None: Imports.Thread(target=postFunction, args=postArgs, kwargs=postKwArgs).start()
             self.lastExecutionAt = Imports.time()
-        self.__workerIdle = True
+        self.__executorIdle = True
 
 
     def queueAction(self, mainFunction, executePriority:int=0, executeThreaded: bool = False, postFunction = None, postArgs:tuple = None, postKwArgs:dict = None, *args, **kwargs):
         """
-        Queue a new function to be executed
-        :param postKwArgs:
-        :param postArgs:
-        :param postFunction:
-        :param mainFunction:
-        :param executePriority:
-        :param executeThreaded:
+        Queue here.
+        :param mainFunction: The function to be run when it reaches its turn.
+        :param executePriority: Priority for execution. High priority tasks are executed before low priority ones. There's no limit for highest or lowest value.
+        :param executeThreaded: Function is executed in a new thread. If True Rate limit is calculated from the start of execution, and output from the function can't be fetched. If False Rate limit is calculated from ending of execution of the function, also output from function can be fetched
+        and passed if needed.
+        :param postFunction: A second function(optional) to execute when the main function starts to execute(if Threaded) else after the main function is executed(if not Threaded). postFunction, if passed, is always executed in a new thread.
+        :param postArgs: Arguments to pass only to the postFunction. Must be a tuple.
+        :param postKwArgs: Keyword-Arguments to pass only to the postFunction. Must be a tuple.
+        :param args: All additional arguments to be passed to mainFunction
+        :param kwargs: All additional keyword-arguments to be passed to mainFunction
         :return:
         """
         if not callable(mainFunction): return print("Please pass a callable object as the `mainFunction` parameter...")

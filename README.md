@@ -1,4 +1,4 @@
-# rateLimitedQueues v0.0.1a7
+# rateLimitedQueues v0.0.2
 
 ```pip install rateLimitedQueues --upgrade```
 
@@ -18,16 +18,19 @@ python3 -m pip install rateLimitedQueues --upgrade
 ```
 from rateLimitedQueues import Manager
 
-rateLimiter = Manager()
+rateLimiter = Manager(timeBetweenExecution=1, smallestWaitTime=0)
 
-def functionToCall(a, b, c, d, *args, **kwargs):
-    sleep(2)
-    print(a, b, c, d, args, kwargs)
+def mainFunction(url, headers, json, *args, **kwargs):
+    sleep(1)
+    print(args, kwargs)
 
 
 for _ in range(10):
-    rateLimiter.queueAction(functionToCall, randrange(1,5), True, 1, 2, 3, 4, 5, c=10, d=12, e=60)
-
+    rateLimiter.queueAction(mainFunction, postFunction=functionToCallAfterMainFunction, postKwArgs={"kwarg1":True, "kwarg2": 20},
+                            executePriority=3, executeThreaded=False,
+                            'https://www.google.com',
+                            headers={'Authorization': "Bearer 1234"},
+                            json={})
 ```
 
 
