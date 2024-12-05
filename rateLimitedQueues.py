@@ -1,4 +1,4 @@
-__version__ = "0.0.2"
+__version__ = "0.0.3"
 __packagename__ = "rateLimitedQueues"
 
 
@@ -15,8 +15,17 @@ def updatePackage():
         latest = data['info']['version']
         if latest != __version__:
             try:
-                import pip
-                pip.main(["install", __packagename__, "--upgrade"])
+                import subprocess
+                from pip._internal.utils.entrypoints import (
+                    get_best_invocation_for_this_pip,
+                    get_best_invocation_for_this_python,
+                )
+                from pip._internal.utils.compat import WINDOWS
+                if WINDOWS:
+                    pip_cmd = f"{get_best_invocation_for_this_python()} -m pip"
+                else:
+                    pip_cmd = get_best_invocation_for_this_pip()
+                subprocess.run(f"{pip_cmd} install {__packagename__} --upgrade")
                 print(f"\nUpdated package {__packagename__} v{__version__} to v{latest}\nPlease restart the program for changes to take effect")
                 sleep(3)
             except:
@@ -29,63 +38,91 @@ def updatePackage():
 
 
 class Imports:
-    from typing import Any, Callable
     from time import sleep, time
     from threading import Thread
+    from typing import Callable
+    class Executable:
+        def __init__(self, manager, mainFunction, mainThreaded:bool, args=None, kwargs=None, postFunction=None, postThreaded:bool=None, postArgs=None, postKwArgs=None):
+            self.manager = manager
+            self.mainThreaded = mainThreaded
+            self.main = mainFunction
+            self.post = postFunction
+            self.postThreaded = postThreaded
+            self.mainArgs = args
+            self.mainKwArgs = kwargs
+            self.postArgs = postArgs
+            self.postKwArgs = postKwArgs
+            self.response = None
+            self.start = 0
+            self.end = 0
+        def execute(self):
+            self.start = Imports.time()
+            if self.post is not None:
+                self.postKwArgs["FunctionResponse"] = self.response = self.main(*self.mainArgs, **self.mainKwArgs)
+                if self.postThreaded: Imports.Thread(target=self.post, args=self.postArgs, kwargs=self.postKwArgs).start()
+                else: self.post(*self.postArgs, **self.postKwArgs)
+            self.end = Imports.time()
 
 
-class Manager:
-    def __init__(self, timeBetweenExecution:float=0, smallestWaitTime:float=0):
+class RateLimitedQueues:
+    def __init__(self, timeBetweenExecution:float=0):
         """
         Initialises a rate limiter cum queued event executor
-        :param timeBetweenExecution: Time to wait between concurrent executions. By default, executed immediately without any time wait.
-        :param smallestWaitTime: any time duration greater than 0 and less than `smallestWaitTime` will automatically be changed to `smallestWaitTime` to prevent warnings for example libuv needs smallestWaitTime to be 0.001
+        :param timeBetweenExecution: Time to wait between concurrent executions (in seconds). By default, executed immediately without any time wait.
         """
-        self.__executorIdle = True
-        self.__tasks:dict[int, list[list[Imports.Callable | tuple[Imports.Any] | dict[str, Imports.Any]]]] = {}
-        self.maxRateLimitWaitDuration = timeBetweenExecution
-        self.minRateLimitWaitDuration = smallestWaitTime
+        self.__idle = True
+        self.__queue:dict[int, list[Imports.Executable]] = {}
+        self.__delay = timeBetweenExecution
         self.lastExecutionAt = 0
 
-
-    def __startExecution(self) -> None:
+    def __executionCompleted(self):
         """
-        Private method to start executing all pending actions. Runs only one instance of executor. Executes only the oldest task with the highest priority. Handles all time limits.
+        Private function to automatically start the next function executor
         :return:
         """
-        if self.__executorIdle: self.__executorIdle = False
-        else: return
-        while self.__tasks:
-            topPriority = max(self.__tasks)
-            task = self.__tasks[topPriority].pop()
-            if not self.__tasks[topPriority]: self.__tasks.pop(topPriority)
-            mainFunction, args, kwargs, executeThreaded, postFunction, postArgs, postKwArgs = task
-            if postKwArgs is None: postKwArgs = {}
-            if postArgs is None: postArgs = ()
-            if self.maxRateLimitWaitDuration > 0:
+        self.lastExecutionAt = Imports.time()
+        self.__idle = True
+        self.__executeNext()
+
+    def __executeNext(self) -> None:
+        """
+        Private function to execute the next in queue, and ignore if some other function is already executing
+        Handles rate limits and priorities
+        :return:
+        """
+        if not self.__idle: return
+        if self.__queue:
+            self.__idle = False
+            while self.__queue:
+                topPriority = max(self.__queue)
+                if not self.__queue[topPriority]: self.__queue.pop(topPriority)
+                else:
+                    executable = self.__queue[topPriority].pop(0)
+                    break
+            else: return
+            if self.__delay > 0:
                 while True:
-                    toSleep = self.maxRateLimitWaitDuration - (Imports.time() - self.lastExecutionAt)
+                    toSleep = self.__delay - (Imports.time() - self.lastExecutionAt)
                     if toSleep > 0:
-                        if toSleep > self.minRateLimitWaitDuration: Imports.sleep(toSleep)
-                        else: Imports.sleep(self.minRateLimitWaitDuration)
-                    else: break
-            if executeThreaded: Imports.Thread(target=mainFunction, args=args, kwargs=kwargs).start()
-            else: postKwArgs.update({"functionResponse": mainFunction(*args, **kwargs)})
-            if postFunction is not None: Imports.Thread(target=postFunction, args=postArgs, kwargs=postKwArgs).start()
-            self.lastExecutionAt = Imports.time()
-        self.__executorIdle = True
+                        if toSleep > self.__delay: Imports.sleep(toSleep)
+                        else: Imports.sleep(self.__delay)
+                    else:
+                        break
+            if executable.mainThreaded: Imports.Thread(target=executable.execute).start()
+            else: executable.execute()
+            self.__executionCompleted()
 
 
-    def queueAction(self, mainFunction, executePriority:int=0, executeThreaded: bool = False, postFunction = None, postArgs:tuple = None, postKwArgs:dict = None, *args, **kwargs):
+    def queueAction(self, mainFunction:Imports.Callable, executeMainInThread:bool = False, executePriority:int=0, postFunction:Imports.Callable=None, executePostInThread:bool=None, postArgs:tuple=None, postKwArgs:dict=None, *args, **kwargs):
         """
         Queue here.
         :param mainFunction: The function to be run when it reaches its turn.
+        :param executeMainInThread: mainFunction is executed in a new thread. If True Rate limit is calculated from the start of execution of mainFunction. If False Rate limit is calculated from ending of execution of the mainFunction
         :param executePriority: Priority for execution. High priority tasks are executed before low priority ones. There's no limit for highest or lowest value.
-        :param executeThreaded: Function is executed in a new thread. If True Rate limit is calculated from the start of execution, and output from the function can't be fetched. If False Rate limit is calculated from ending of execution of the function, also output from function can be fetched
-        and passed if needed.
-        :param postFunction: A second function(optional) to execute when the main function starts to execute(if Threaded) else after the main function is executed(if not Threaded). postFunction, if passed, is always executed in a new thread.
+        :param postFunction: A second function(optional) to execute when the main function completes its execution (even if threaded). postFunction if present gets "FunctionResponse" in its kwargs which contains the value returned my mainFunction
+        :param executePostInThread: postFunction is executed in a new thread. If True Rate limit is calculated from the start of execution of postFunction. If False Rate limit is calculated from ending of execution of the postFunction
         :param postArgs: Arguments to pass only to the postFunction. Must be a tuple.
-        :param postKwArgs: Keyword-Arguments to pass only to the postFunction. Must be a tuple.
+        :param postKwArgs: Keyword-Arguments to pass only to the postFunction. Must be a dictionary.
         :param args: All additional arguments to be passed to mainFunction
         :param kwargs: All additional keyword-arguments to be passed to mainFunction
         :return:
@@ -94,7 +131,7 @@ class Manager:
         if postFunction is not None and not callable(postFunction): return print("Please pass a callable object as the `postFunction` parameter...")
         if postArgs is not None and type(postArgs)!=tuple: return print("Please pass a tuple as postArgs...")
         if postKwArgs is not None and type(postKwArgs)!=dict: return print("Please pass a dictionary as postKwArgs...")
-        execList = [mainFunction, args, kwargs, executeThreaded, postFunction, postArgs, postKwArgs]
-        if executePriority in self.__tasks: self.__tasks[executePriority].append(execList)
-        else: self.__tasks[executePriority] = [execList]
-        Imports.Thread(target=self.__startExecution).start()
+        executable = Imports.Executable(self, mainFunction, executeMainInThread, args, kwargs, postFunction, executePostInThread, postArgs, postKwArgs)
+        if executePriority not in self.__queue: self.__queue[executePriority] = []
+        self.__queue[executePriority].append(executable)
+        Imports.Thread(target=self.__executeNext).start()
