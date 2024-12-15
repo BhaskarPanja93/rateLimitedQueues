@@ -1,4 +1,4 @@
-__version__ = "0.0.3"
+__version__ = "0.0.3rev1"
 __packagename__ = "rateLimitedQueues"
 
 
@@ -57,8 +57,9 @@ class Imports:
             self.end = 0
         def execute(self):
             self.start = Imports.time()
+            self.response = self.main(*self.mainArgs, **self.mainKwArgs)
             if self.post is not None:
-                self.postKwArgs["FunctionResponse"] = self.response = self.main(*self.mainArgs, **self.mainKwArgs)
+                self.postKwArgs["FunctionResponse"] = self.response
                 if self.postThreaded: Imports.Thread(target=self.post, args=self.postArgs, kwargs=self.postKwArgs).start()
                 else: self.post(*self.postArgs, **self.postKwArgs)
             self.end = Imports.time()
@@ -92,7 +93,6 @@ class RateLimitedQueues:
         """
         if not self.__idle: return
         if self.__queue:
-            self.__idle = False
             while self.__queue:
                 topPriority = max(self.__queue)
                 if not self.__queue[topPriority]: self.__queue.pop(topPriority)
@@ -100,6 +100,7 @@ class RateLimitedQueues:
                     executable = self.__queue[topPriority].pop(0)
                     break
             else: return
+            self.__idle = False
             if self.__delay > 0:
                 while True:
                     toSleep = self.__delay - (Imports.time() - self.lastExecutionAt)

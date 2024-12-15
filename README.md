@@ -1,4 +1,4 @@
-# rateLimitedQueues v0.0.3
+# rateLimitedQueues v0.0.3rev1
 
 ```pip install rateLimitedQueues --upgrade```
 
